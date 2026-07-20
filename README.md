@@ -7,9 +7,9 @@ been used for.
 
 ## How to use
 
-Just open `index.html` in a browser — no build step, no server needed. This repo is
-**private**, so `config.js` (Supabase URL + publishable key) ships right alongside it and
-everything works out of the box.
+Open `index.html` in a browser (or visit the GitHub Pages URL) and **sign in** with your
+Supabase Auth login (`workepier@gmail.com` + your password). No build step, no server.
+The session is remembered in the browser; the `⎋` button signs out.
 
 - **＋ Add Account** — enter a phone number (that's the account's name). A mail.tm email
   address is created automatically and saved next to it, along with a generated password
@@ -39,16 +39,28 @@ Schema lives in [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_i
 | `fields`   | your custom column headers                            |
 | `checks`   | one checkbox state per (account × field)              |
 
-The app connects with the project's **publishable key** (designed for client-side use).
-RLS is enabled with permissive policies for the anon role.
+The app connects with the project's **publishable key** (designed for client-side use) and
+signs in through **Supabase Auth**. RLS policies only allow the owner's user account
+(pinned by UUID in `0002_auth_lockdown.sql`) — the publishable key alone can read/write
+nothing, so the key being visible in `config.js` is safe.
+
+## Hosting on GitHub Pages
+
+Safe to do now, because all data access requires your login:
+
+1. Repo **Settings → General → Danger Zone → Change visibility → Public**
+   (free GitHub Pages needs a public repo).
+2. **Settings → Pages → Deploy from a branch → `main` / `(root)` → Save.**
+3. Your tracker will be at `https://workepier-ai.github.io/PhLog/` after a minute or two.
+
+To change your password: Supabase dashboard → Authentication → Users →
+`workepier@gmail.com` → ⋯ → Update password (or send a recovery email).
 
 ## ⚠️ Security notes
 
-- **Keep this repo private.** Anyone with `config.js` (URL + publishable key) can read/write
-  the tracker data, because RLS is intentionally open for the anon role. If you ever need
-  real protection, add Supabase Auth and switch the RLS policies from `anon` to
-  `authenticated`. (`config.example.js` shows the keyless template if you ever split the
-  config back out.)
+- Data is protected by Supabase Auth + RLS pinned to your user UUID. Even if someone signs
+  up their own user against the project, the policies still deny them. To grant another
+  person access, add their UUID to the policies in a new migration.
 - mail.tm inboxes are **disposable/public-grade email** — never use them for anything you
   care about. Inboxes and messages are auto-deleted by mail.tm after a period of inactivity.
 - Email passwords are stored in plain text on purpose (the app needs them to log into

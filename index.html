@@ -122,6 +122,7 @@
   <div class="spacer"></div>
   <button id="add-field-btn">＋ Field</button>
   <button class="primary" id="add-account-btn">＋ Add Account</button>
+  <button id="logout-btn" title="Sign out">⎋</button>
 </header>
 
 <main>
@@ -131,6 +132,21 @@
   </table>
   <div class="empty" id="empty">Loading…</div>
 </main>
+
+<!-- Login -->
+<div class="overlay" id="login-overlay">
+  <div class="modal">
+    <h2>🔐 Sign in</h2>
+    <label>Email</label>
+    <input id="login-email" type="email" autocomplete="username">
+    <label>Password</label>
+    <input id="login-pass" type="password" autocomplete="current-password">
+    <div class="status" id="login-status"></div>
+    <div class="row">
+      <button class="primary" id="login-btn">Sign in</button>
+    </div>
+  </div>
+</div>
 
 <!-- Add account modal -->
 <div class="overlay" id="add-overlay">
@@ -189,16 +205,72 @@ function toast(msg, ms = 2200) {
   t._h = setTimeout(() => t.classList.remove('show'), ms);
 }
 
-async function sb(path, opts = {}) {
+/* ---- Auth: password login against Supabase Auth, session in localStorage ---- */
+const LS_SESSION = 'phlog_session';
+let session = null;
+try { session = JSON.parse(localStorage.getItem(LS_SESSION)); } catch { session = null; }
+
+function saveSession(s) {
+  session = s;
+  if (s) localStorage.setItem(LS_SESSION, JSON.stringify(s));
+  else localStorage.removeItem(LS_SESSION);
+}
+
+async function authRequest(path, body) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.msg || data.error_description || `Auth error ${res.status}`);
+  return data;
+}
+
+function sessionFrom(d) {
+  return {
+    access_token: d.access_token,
+    refresh_token: d.refresh_token,
+    expires_at: Date.now() + (d.expires_in - 60) * 1000,
+  };
+}
+
+async function login(email, password) {
+  saveSession(sessionFrom(await authRequest('token?grant_type=password', { email, password })));
+}
+
+async function refreshSession() {
+  if (!session?.refresh_token) throw new Error('Not signed in');
+  saveSession(sessionFrom(await authRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token })));
+}
+
+function showLogin(message) {
+  saveSession(null);
+  $('grid').hidden = true;
+  $('empty').style.display = '';
+  $('empty').textContent = 'Signed out.';
+  $('login-status').textContent = message || '';
+  $('login-status').className = 'status err';
+  $('login-overlay').classList.add('open');
+  $('login-email').focus();
+}
+
+async function sb(path, opts = {}, isRetry = false) {
+  if (!session) throw new Error('Not signed in');
+  if (Date.now() >= session.expires_at) await refreshSession();
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...opts,
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Authorization: `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
       ...(opts.headers || {}),
     },
   });
+  if (res.status === 401 && !isRetry) {
+    await refreshSession().catch(() => { showLogin('Session expired — sign in again.'); throw new Error('Session expired'); });
+    return sb(path, opts, true);
+  }
   if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -567,11 +639,36 @@ $('inbox-refresh').onclick = refreshInbox;
 $('msg-close').onclick = () => $('msg-view').classList.remove('open');
 
 /* ================= BOOT ================= */
+$('login-btn').onclick = async () => {
+  const status = $('login-status');
+  status.className = 'status';
+  status.textContent = 'Signing in…';
+  try {
+    await login($('login-email').value.trim(), $('login-pass').value);
+    $('login-overlay').classList.remove('open');
+    $('empty').textContent = 'Loading…';
+    await loadAll();
+  } catch (e) {
+    status.textContent = e.message;
+    status.className = 'status err';
+  }
+};
+$('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('login-btn').click(); });
+
+$('logout-btn').onclick = () => showLogin();
+
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   $('empty').textContent = 'Missing config.js — copy config.example.js to config.js (same folder) and fill in your Supabase URL + publishable key.';
+} else if (!session) {
+  showLogin();
 } else {
-  loadAll().catch((e) => {
-    $('empty').textContent = `Failed to load: ${e.message}`;
+  loadAll().catch(async (e) => {
+    // stale/expired session → back to login instead of a dead error screen
+    if (String(e.message).includes('401') || String(e.message).includes('Session expired') || String(e.message).includes('Not signed in')) {
+      showLogin('Session expired — sign in again.');
+    } else {
+      $('empty').textContent = `Failed to load: ${e.message}`;
+    }
   });
 }
 </script>
