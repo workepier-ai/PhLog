@@ -48,8 +48,11 @@
     text-align: left; background: var(--panel); white-space: nowrap;
   }
   th { background: var(--panel2); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
-  th.field-col { cursor: pointer; }
+  th.field-col { cursor: pointer; user-select: none; }
   th.field-col:hover { color: var(--text); }
+  th.field-col.dragging { opacity: .4; }
+  th.field-col.drop-target { border-left: 3px solid var(--accent); }
+  th .grip { cursor: grab; margin-right: 6px; color: var(--muted); font-size: 12px; }
   th .cog { margin-left: 6px; font-size: 11px; }
   td.check-cell { text-align: center; }
   .cellwrap { display: flex; align-items: center; justify-content: center; gap: 5px; }
@@ -429,13 +432,24 @@ function render() {
   for (const f of fields) {
     const th = document.createElement('th');
     th.className = 'field-col';
-    th.title = 'Click to configure this column';
-    th.textContent = f.name;
+    th.draggable = true;
+    th.dataset.fieldId = f.id;
+    th.title = 'Click to configure · drag to reorder';
+    const grip = document.createElement('span');
+    grip.className = 'grip';
+    grip.textContent = '⠿';
+    th.appendChild(grip);
+    th.appendChild(document.createTextNode(f.name));
     const cog = document.createElement('span');
     cog.className = 'cog';
     cog.textContent = '⚙';
     th.appendChild(cog);
-    th.onclick = () => openFieldModal(f);
+    th.onclick = (e) => { if (!th.dataset.dragging) openFieldModal(f); };
+    th.addEventListener('dragstart', (e) => { dragFieldId = f.id; th.dataset.dragging = '1'; th.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+    th.addEventListener('dragend', () => { th.classList.remove('dragging'); delete th.dataset.dragging; clearDragMarkers(); });
+    th.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (f.id !== dragFieldId) th.classList.add('drop-target'); });
+    th.addEventListener('dragleave', () => th.classList.remove('drop-target'));
+    th.addEventListener('drop', (e) => { e.preventDefault(); th.classList.remove('drop-target'); reorderField(dragFieldId, f.id); });
     head.appendChild(th);
   }
   const thActions = document.createElement('th');
@@ -551,6 +565,37 @@ async function toggleCheck(acct, field, cb) {
   } catch (e) {
     cb.checked = !cb.checked;
     toast(e.message, 4000);
+  }
+}
+
+/* ---- Drag reorder columns ---- */
+let dragFieldId = null;
+
+function clearDragMarkers() {
+  document.querySelectorAll('th.field-col.drop-target').forEach((n) => n.classList.remove('drop-target'));
+}
+
+async function reorderField(sourceId, targetId) {
+  if (!sourceId || sourceId === targetId) return;
+  const order = fields.map((f) => f.id);
+  const from = order.indexOf(sourceId);
+  const to = order.indexOf(targetId);
+  if (from < 0 || to < 0) return;
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  // reassign positions and optimistically re-render
+  fields = order.map((id, i) => {
+    const f = fields.find((x) => x.id === id);
+    f.position = i;
+    return f;
+  });
+  render();
+  try {
+    await Promise.all(fields.map((f) =>
+      sb(`fields?id=eq.${f.id}`, { method: 'PATCH', body: JSON.stringify({ position: f.position }) })
+    ));
+  } catch (e) {
+    toast(e.message, 4000);
+    await loadAll();
   }
 }
 
@@ -674,16 +719,27 @@ function openCellPop(acct, field, anchor) {
     const line = el('div', 'inline');
     const inp = el('input');
     inp.type = 'text';
-    inp.value = row.cred_password || '';
+    // Default to the account's main password (the Password column value) so every
+    // phone/email listed gets a password auto-filled to match. Persist it on first
+    // open so it's saved and the ▾ shows green.
+    if (!row.cred_password && acct.email_password) {
+      inp.value = acct.email_password;
+      popSave(acct, field, { cred_password: acct.email_password });
+    } else {
+      inp.value = row.cred_password || '';
+    }
     inp.placeholder = '…';
     inp.onchange = () => popSave(acct, field, { cred_password: inp.value });
+    const acctPw = el('button', 'icon', '⤵');
+    acctPw.title = "Reset to this account's password";
+    acctPw.onclick = () => { inp.value = acct.email_password || ''; popSave(acct, field, { cred_password: inp.value }); };
     const gen = el('button', 'icon', '⚄');
-    gen.title = 'Generate random password';
+    gen.title = 'Generate a new random password (just for this site)';
     gen.onclick = () => { inp.value = genPassword(); popSave(acct, field, { cred_password: inp.value }); };
     const cp = el('button', 'icon', '⧉');
     cp.title = 'Copy';
     cp.onclick = () => copyText(inp.value, 'Password');
-    line.append(inp, gen, cp);
+    line.append(inp, acctPw, gen, cp);
     pop.appendChild(line);
   }
 

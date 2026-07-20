@@ -18,10 +18,18 @@ The session is remembered in the browser; the `⎋` button signs out.
   Click any column header (`⚙`) to open the builder: rename it, delete it, and choose which
   extras appear in that column's cells — **Note**, **Email used on this site**, and
   **Password used on this site**.
+- **Reorder columns** — drag any column header (grab the `⠿` handle) left/right to change
+  its position; the new order is saved.
 - **Cell dropdown (`▾`)** — under each checkbox is a dropdown holding that account's details
-  for that specific site: a free-text note, the email used (⤵ quick-fills the account's
-  mail.tm address), and the password used (⚄ generates a random one). The `▾` turns green
-  when a cell has anything stored. Everything saves automatically.
+  for that specific site:
+  - a free-text **note**,
+  - the **email used** (⤵ quick-fills the account's mail.tm address),
+  - the **password used** — this **auto-fills to the account's main password** (the Password
+    column value) the first time you open the cell, so every phone/email listed already has a
+    password. ⤵ resets it to the account password, ⚄ generates a fresh random one just for
+    that site, ⧉ copies.
+
+  The `▾` turns green when a cell has anything stored. Everything saves automatically.
 - **📬** — opens that account's live mail.tm inbox right in the page (great for grabbing
   verification codes/links during sign-up testing).
 - **⧉** — copy email / password to clipboard. Click the dots to reveal a password.
