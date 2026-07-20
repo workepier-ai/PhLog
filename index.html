@@ -50,10 +50,32 @@
   th { background: var(--panel2); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
   th.field-col { cursor: pointer; }
   th.field-col:hover { color: var(--text); }
-  th .del-field { margin-left: 6px; color: var(--muted); cursor: pointer; font-size: 11px; }
-  th .del-field:hover { color: var(--danger); }
+  th .cog { margin-left: 6px; font-size: 11px; }
   td.check-cell { text-align: center; }
-  td.check-cell input { width: 17px; height: 17px; accent-color: var(--accent2); cursor: pointer; }
+  .cellwrap { display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .cellwrap input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--accent2); cursor: pointer; }
+  .more-btn { padding: 1px 5px; font-size: 10px; color: var(--muted); border-radius: 5px; }
+  .more-btn.has-data { color: var(--accent2); border-color: var(--accent2); }
+
+  /* Cell dropdown */
+  #cell-pop {
+    position: absolute; display: none; z-index: 45;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; width: 280px; box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  }
+  #cell-pop .pop-title { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  #cell-pop label { display: block; font-size: 11px; color: var(--muted); margin: 8px 0 3px; }
+  #cell-pop textarea, #cell-pop input[type=text] {
+    width: 100%; padding: 6px 8px; border-radius: 7px; font-size: 13px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    font-family: inherit; resize: vertical;
+  }
+  #cell-pop textarea:focus, #cell-pop input:focus { outline: none; border-color: var(--accent); }
+  #cell-pop .inline { display: flex; gap: 4px; align-items: center; }
+  #cell-pop .inline input { flex: 1; }
+
+  .opts label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin: 6px 0; cursor: pointer; }
+  .opts input { width: 15px; height: 15px; accent-color: var(--accent); }
   .phone { font-weight: 600; font-size: 14px; }
   .email-addr { color: var(--accent); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
   .pw { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; letter-spacing: 1px; }
@@ -147,6 +169,30 @@
     </div>
   </div>
 </div>
+
+<!-- Column builder modal -->
+<div class="overlay" id="field-overlay">
+  <div class="modal">
+    <h2 id="field-title">Column builder</h2>
+    <label>Column name (usually a site)</label>
+    <input id="field-name" placeholder="e.g. Twitter" autocomplete="off">
+    <label>Extras in each cell's dropdown</label>
+    <div class="opts">
+      <label><input type="checkbox" id="field-opt-note"> Note</label>
+      <label><input type="checkbox" id="field-opt-email"> Email used on this site</label>
+      <label><input type="checkbox" id="field-opt-password"> Password used on this site</label>
+    </div>
+    <div class="status" id="field-status"></div>
+    <div class="row">
+      <button id="field-delete" class="danger" style="margin-right:auto">Delete</button>
+      <button id="field-cancel">Cancel</button>
+      <button class="primary" id="field-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Per-cell dropdown -->
+<div id="cell-pop"></div>
 
 <!-- Add account modal -->
 <div class="overlay" id="add-overlay">
@@ -348,17 +394,25 @@ async function mailtmMessage(address, password, id) {
 /* ================= STATE + RENDER ================= */
 let accounts = [];
 let fields = [];
-let checks = {}; // `${account_id}|${field_id}` -> checked
+let checks = {}; // `${account_id}|${field_id}` -> {checked, note, cred_email, cred_password}
+
+function fieldConfig(field) {
+  return Object.assign({ note: true, email: true, password: true }, field.config || {});
+}
+
+function cellHasExtras(row) {
+  return !!(row && (row.note || row.cred_email || row.cred_password));
+}
 
 async function loadAll() {
   const [a, f, c] = await Promise.all([
     sb('accounts?select=*&order=created_at.asc'),
     sb('fields?select=*&order=position.asc,created_at.asc'),
-    sb('checks?select=account_id,field_id,checked'),
+    sb('checks?select=account_id,field_id,checked,note,cred_email,cred_password'),
   ]);
   accounts = a; fields = f;
   checks = {};
-  for (const row of c) checks[`${row.account_id}|${row.field_id}`] = row.checked;
+  for (const row of c) checks[`${row.account_id}|${row.field_id}`] = row;
   render();
 }
 
@@ -375,15 +429,13 @@ function render() {
   for (const f of fields) {
     const th = document.createElement('th');
     th.className = 'field-col';
-    th.title = 'Click to rename';
+    th.title = 'Click to configure this column';
     th.textContent = f.name;
-    th.onclick = () => renameField(f);
-    const del = document.createElement('span');
-    del.className = 'del-field';
-    del.textContent = '✕';
-    del.title = 'Delete this column';
-    del.onclick = (e) => { e.stopPropagation(); deleteField(f); };
-    th.appendChild(del);
+    const cog = document.createElement('span');
+    cog.className = 'cog';
+    cog.textContent = '⚙';
+    th.appendChild(cog);
+    th.onclick = () => openFieldModal(f);
     head.appendChild(th);
   }
   const thActions = document.createElement('th');
@@ -451,11 +503,19 @@ function render() {
     for (const f of fields) {
       const td = document.createElement('td');
       td.className = 'check-cell';
+      const wrap = document.createElement('div');
+      wrap.className = 'cellwrap';
       const cb = document.createElement('input');
       cb.type = 'checkbox';
-      cb.checked = !!checks[`${acct.id}|${f.id}`];
+      cb.checked = !!checks[`${acct.id}|${f.id}`]?.checked;
       cb.onchange = () => toggleCheck(acct, f, cb);
-      td.appendChild(cb);
+      const more = document.createElement('button');
+      more.className = 'more-btn' + (cellHasExtras(checks[`${acct.id}|${f.id}`]) ? ' has-data' : '');
+      more.textContent = '▾';
+      more.title = 'Note / email / password for this site';
+      more.onclick = (e) => { e.stopPropagation(); openCellPop(acct, f, more); };
+      wrap.append(cb, more);
+      td.appendChild(wrap);
       tr.appendChild(td);
     }
 
@@ -475,48 +535,170 @@ function render() {
 }
 
 /* ================= ACTIONS ================= */
-async function toggleCheck(acct, field, cb) {
+async function upsertCheck(acct, field, patch) {
   const key = `${acct.id}|${field.id}`;
+  await sb('checks?on_conflict=account_id,field_id', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({ account_id: acct.id, field_id: field.id, ...patch, updated_at: new Date().toISOString() }),
+  });
+  checks[key] = { ...(checks[key] || { account_id: acct.id, field_id: field.id, checked: false, note: '', cred_email: '', cred_password: '' }), ...patch };
+}
+
+async function toggleCheck(acct, field, cb) {
   try {
-    await sb('checks?on_conflict=account_id,field_id', {
-      method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify({ account_id: acct.id, field_id: field.id, checked: cb.checked, updated_at: new Date().toISOString() }),
-    });
-    checks[key] = cb.checked;
+    await upsertCheck(acct, field, { checked: cb.checked });
   } catch (e) {
     cb.checked = !cb.checked;
     toast(e.message, 4000);
   }
 }
 
-async function addField() {
-  const name = prompt('New column name (e.g. "Twitter", "Verified", "Used for signup"):');
-  if (!name || !name.trim()) return;
-  const position = fields.length ? Math.max(...fields.map((f) => f.position)) + 1 : 0;
-  try {
-    await sb('fields', { method: 'POST', body: JSON.stringify({ name: name.trim(), position }) });
-    await loadAll();
-    toast(`Column “${name.trim()}” added`);
-  } catch (e) { toast(e.message, 4000); }
+/* ---- Column builder modal ---- */
+let editingField = null;
+
+function openFieldModal(field) {
+  editingField = field;
+  const cfg = field ? fieldConfig(field) : { note: true, email: true, password: true };
+  $('field-title').textContent = field ? `Configure “${field.name}”` : 'New column';
+  $('field-name').value = field ? field.name : '';
+  $('field-opt-note').checked = !!cfg.note;
+  $('field-opt-email').checked = !!cfg.email;
+  $('field-opt-password').checked = !!cfg.password;
+  $('field-status').textContent = '';
+  $('field-status').className = 'status';
+  $('field-delete').style.display = field ? '' : 'none';
+  $('field-overlay').classList.add('open');
+  $('field-name').focus();
 }
 
-async function renameField(field) {
-  const name = prompt('Rename column:', field.name);
-  if (!name || !name.trim() || name.trim() === field.name) return;
+$('field-cancel').onclick = () => $('field-overlay').classList.remove('open');
+
+$('field-save').onclick = async () => {
+  const name = $('field-name').value.trim();
+  const status = $('field-status');
+  if (!name) { status.textContent = 'Give the column a name.'; status.className = 'status err'; return; }
+  const config = {
+    note: $('field-opt-note').checked,
+    email: $('field-opt-email').checked,
+    password: $('field-opt-password').checked,
+  };
   try {
-    await sb(`fields?id=eq.${field.id}`, { method: 'PATCH', body: JSON.stringify({ name: name.trim() }) });
+    if (editingField) {
+      await sb(`fields?id=eq.${editingField.id}`, { method: 'PATCH', body: JSON.stringify({ name, config }) });
+    } else {
+      const position = fields.length ? Math.max(...fields.map((f) => f.position)) + 1 : 0;
+      await sb('fields', { method: 'POST', body: JSON.stringify({ name, position, config }) });
+    }
+    $('field-overlay').classList.remove('open');
+    await loadAll();
+    toast(`Column “${name}” saved`);
+  } catch (e) { status.textContent = e.message; status.className = 'status err'; }
+};
+
+$('field-delete').onclick = async () => {
+  if (!editingField) return;
+  if (!confirm(`Delete column “${editingField.name}” and everything stored under it?`)) return;
+  try {
+    await sb(`fields?id=eq.${editingField.id}`, { method: 'DELETE' });
+    $('field-overlay').classList.remove('open');
     await loadAll();
   } catch (e) { toast(e.message, 4000); }
+};
+
+/* ---- Per-cell dropdown (note / email / password for a site) ---- */
+let popCtx = null;
+let popDirty = false;
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
 }
 
-async function deleteField(field) {
-  if (!confirm(`Delete column “${field.name}” and all its checkboxes?`)) return;
-  try {
-    await sb(`fields?id=eq.${field.id}`, { method: 'DELETE' });
-    await loadAll();
-  } catch (e) { toast(e.message, 4000); }
+function closeCellPop() {
+  if (!popCtx) return;
+  $('cell-pop').style.display = 'none';
+  popCtx = null;
+  if (popDirty) { popDirty = false; render(); }
 }
+
+function popSave(acct, field, patch) {
+  upsertCheck(acct, field, patch)
+    .then(() => { popDirty = true; })
+    .catch((e) => toast(e.message, 4000));
+}
+
+function openCellPop(acct, field, anchor) {
+  if (popCtx && popCtx.acct === acct && popCtx.field === field) { closeCellPop(); return; }
+  const rect = anchor.getBoundingClientRect(); // before closeCellPop — it may re-render and detach the anchor
+  closeCellPop();
+  popCtx = { acct, field };
+  const cfg = fieldConfig(field);
+  const row = checks[`${acct.id}|${field.id}`] || {};
+  const pop = $('cell-pop');
+  pop.innerHTML = '';
+  pop.appendChild(el('div', 'pop-title', `${field.name} — ${acct.phone}`));
+
+  if (cfg.note) {
+    pop.appendChild(el('label', null, 'Note'));
+    const ta = el('textarea');
+    ta.rows = 2;
+    ta.value = row.note || '';
+    ta.placeholder = 'e.g. signed up 20/7, username xyz…';
+    ta.onchange = () => popSave(acct, field, { note: ta.value });
+    pop.appendChild(ta);
+  }
+
+  if (cfg.email) {
+    pop.appendChild(el('label', null, 'Email used on this site'));
+    const line = el('div', 'inline');
+    const inp = el('input');
+    inp.type = 'text';
+    inp.value = row.cred_email || '';
+    inp.placeholder = acct.email || '';
+    inp.onchange = () => popSave(acct, field, { cred_email: inp.value });
+    const use = el('button', 'icon', '⤵');
+    use.title = 'Use this account\'s mail.tm email';
+    use.onclick = () => { inp.value = acct.email || ''; popSave(acct, field, { cred_email: inp.value }); };
+    const cp = el('button', 'icon', '⧉');
+    cp.title = 'Copy';
+    cp.onclick = () => copyText(inp.value, 'Email');
+    line.append(inp, use, cp);
+    pop.appendChild(line);
+  }
+
+  if (cfg.password) {
+    pop.appendChild(el('label', null, 'Password used on this site'));
+    const line = el('div', 'inline');
+    const inp = el('input');
+    inp.type = 'text';
+    inp.value = row.cred_password || '';
+    inp.placeholder = '…';
+    inp.onchange = () => popSave(acct, field, { cred_password: inp.value });
+    const gen = el('button', 'icon', '⚄');
+    gen.title = 'Generate random password';
+    gen.onclick = () => { inp.value = genPassword(); popSave(acct, field, { cred_password: inp.value }); };
+    const cp = el('button', 'icon', '⧉');
+    cp.title = 'Copy';
+    cp.onclick = () => copyText(inp.value, 'Password');
+    line.append(inp, gen, cp);
+    pop.appendChild(line);
+  }
+
+  if (!cfg.note && !cfg.email && !cfg.password) {
+    pop.appendChild(el('div', 'pop-title', 'No extras enabled — click the column header to configure.'));
+  }
+
+  pop.style.display = 'block';
+  pop.style.left = `${Math.min(rect.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - 300)}px`;
+  pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+}
+
+document.addEventListener('click', (e) => {
+  if (popCtx && !$('cell-pop').contains(e.target)) closeCellPop();
+});
 
 async function deleteAccount(acct) {
   if (!confirm(`Delete account ${acct.phone} (${acct.email || 'no email'})?\nThe mail.tm inbox itself is not deleted.`)) return;
@@ -574,7 +756,7 @@ $('add-save').onclick = async () => {
 $('in-phone').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('add-save').click(); });
 $('in-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('add-save').click(); });
 
-$('add-field-btn').onclick = addField;
+$('add-field-btn').onclick = () => openFieldModal(null);
 
 /* ================= INBOX ================= */
 let inboxAcct = null;

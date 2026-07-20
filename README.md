@@ -14,9 +14,14 @@ The session is remembered in the browser; the `⎋` button signs out.
 - **＋ Add Account** — enter a phone number (that's the account's name). A mail.tm email
   address is created automatically and saved next to it, along with a generated password
   (or type your own).
-- **＋ Field** — add a custom column (e.g. `Google`, `Facebook`, `Verified`). Each account
-  gets a checkbox under every column so you can track what the number has been used for.
-  Click a column header to rename it, `✕` to delete it.
+- **＋ Field / column builder** — add a custom column (usually a site, e.g. `Twitter`).
+  Click any column header (`⚙`) to open the builder: rename it, delete it, and choose which
+  extras appear in that column's cells — **Note**, **Email used on this site**, and
+  **Password used on this site**.
+- **Cell dropdown (`▾`)** — under each checkbox is a dropdown holding that account's details
+  for that specific site: a free-text note, the email used (⤵ quick-fills the account's
+  mail.tm address), and the password used (⚄ generates a random one). The `▾` turns green
+  when a cell has anything stored. Everything saves automatically.
 - **📬** — opens that account's live mail.tm inbox right in the page (great for grabbing
   verification codes/links during sign-up testing).
 - **⧉** — copy email / password to clipboard. Click the dots to reveal a password.
