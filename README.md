@@ -20,6 +20,11 @@ The session is remembered in the browser; the `⎋` button signs out.
   **Password used on this site**.
 - **Reorder columns** — drag any column header (grab the `⠿` handle) left/right to change
   its position; the new order is saved.
+- **Site links** — in the column builder, set a **Site link** URL for a column. The header
+  then shows a `🔗` and **clicking it opens the site in a new tab** (the `⚙` still opens the
+  builder). Each cell in that column also gets an **↗ button** that, in one click, **copies
+  that account's email to the clipboard and opens the site in a new tab** — handy for pasting
+  the email straight into a signup form.
 - **Cell dropdown (`▾`)** — under each checkbox is a dropdown holding that account's details
   for that specific site:
   - a free-text **note**,

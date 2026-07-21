@@ -53,7 +53,10 @@
   th.field-col.dragging { opacity: .4; }
   th.field-col.drop-target { border-left: 3px solid var(--accent); }
   th .grip { cursor: grab; margin-right: 6px; color: var(--muted); font-size: 12px; }
+  th .link-ico { margin-right: 4px; font-size: 11px; }
   th .cog { margin-left: 6px; font-size: 11px; }
+  .go-btn { padding: 1px 5px; font-size: 11px; color: var(--accent); border-radius: 5px; }
+  .go-btn:hover { border-color: var(--accent); background: var(--panel); }
   td.check-cell { text-align: center; }
   .cellwrap { display: flex; align-items: center; justify-content: center; gap: 5px; }
   .cellwrap input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--accent2); cursor: pointer; }
@@ -179,6 +182,8 @@
     <h2 id="field-title">Column builder</h2>
     <label>Column name (usually a site)</label>
     <input id="field-name" placeholder="e.g. Twitter" autocomplete="off">
+    <label>Site link (optional) — click the header to open it</label>
+    <input id="field-url" placeholder="https://twitter.com/signup" autocomplete="off">
     <label>Extras in each cell's dropdown</label>
     <div class="opts">
       <label><input type="checkbox" id="field-opt-note"> Note</label>
@@ -400,7 +405,13 @@ let fields = [];
 let checks = {}; // `${account_id}|${field_id}` -> {checked, note, cred_email, cred_password}
 
 function fieldConfig(field) {
-  return Object.assign({ note: true, email: true, password: true }, field.config || {});
+  return Object.assign({ note: true, email: true, password: true, url: '' }, field.config || {});
+}
+
+function normalizeUrl(u) {
+  u = (u || '').trim();
+  if (!u) return '';
+  return /^https?:\/\//i.test(u) ? u : `https://${u}`;
 }
 
 function cellHasExtras(row) {
@@ -430,21 +441,32 @@ function render() {
     head.appendChild(th);
   }
   for (const f of fields) {
+    const cfg = fieldConfig(f);
+    const url = normalizeUrl(cfg.url);
     const th = document.createElement('th');
     th.className = 'field-col';
     th.draggable = true;
     th.dataset.fieldId = f.id;
-    th.title = 'Click to configure · drag to reorder';
+    th.title = url ? `Click to open ${url} · drag to reorder · ⚙ to configure` : 'Click to configure · drag to reorder';
     const grip = document.createElement('span');
     grip.className = 'grip';
     grip.textContent = '⠿';
     th.appendChild(grip);
+    if (url) {
+      const link = document.createElement('span');
+      link.className = 'link-ico';
+      link.textContent = '🔗';
+      th.appendChild(link);
+    }
     th.appendChild(document.createTextNode(f.name));
     const cog = document.createElement('span');
     cog.className = 'cog';
     cog.textContent = '⚙';
+    cog.title = 'Configure column';
+    cog.onclick = (e) => { e.stopPropagation(); openFieldModal(f); };
     th.appendChild(cog);
-    th.onclick = (e) => { if (!th.dataset.dragging) openFieldModal(f); };
+    // Click header: open the site if a link is set, otherwise open config.
+    th.onclick = () => { if (th.dataset.dragging) return; if (url) window.open(url, '_blank', 'noopener'); else openFieldModal(f); };
     th.addEventListener('dragstart', (e) => { dragFieldId = f.id; th.dataset.dragging = '1'; th.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
     th.addEventListener('dragend', () => { th.classList.remove('dragging'); delete th.dataset.dragging; clearDragMarkers(); });
     th.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (f.id !== dragFieldId) th.classList.add('drop-target'); });
@@ -523,12 +545,27 @@ function render() {
       cb.type = 'checkbox';
       cb.checked = !!checks[`${acct.id}|${f.id}`]?.checked;
       cb.onchange = () => toggleCheck(acct, f, cb);
+      wrap.appendChild(cb);
+      const cfg = fieldConfig(f);
+      const url = normalizeUrl(cfg.url);
+      if (url) {
+        const go = document.createElement('button');
+        go.className = 'go-btn';
+        go.textContent = '↗';
+        go.title = `Open ${cfg.url} and copy ${acct.email || "this account's email"}`;
+        go.onclick = (e) => {
+          e.stopPropagation();
+          if (acct.email) copyText(acct.email, 'Email');
+          window.open(url, '_blank', 'noopener');
+        };
+        wrap.appendChild(go);
+      }
       const more = document.createElement('button');
       more.className = 'more-btn' + (cellHasExtras(checks[`${acct.id}|${f.id}`]) ? ' has-data' : '');
       more.textContent = '▾';
       more.title = 'Note / email / password for this site';
       more.onclick = (e) => { e.stopPropagation(); openCellPop(acct, f, more); };
-      wrap.append(cb, more);
+      wrap.appendChild(more);
       td.appendChild(wrap);
       tr.appendChild(td);
     }
@@ -607,6 +644,7 @@ function openFieldModal(field) {
   const cfg = field ? fieldConfig(field) : { note: true, email: true, password: true };
   $('field-title').textContent = field ? `Configure “${field.name}”` : 'New column';
   $('field-name').value = field ? field.name : '';
+  $('field-url').value = cfg.url || '';
   $('field-opt-note').checked = !!cfg.note;
   $('field-opt-email').checked = !!cfg.email;
   $('field-opt-password').checked = !!cfg.password;
@@ -627,6 +665,7 @@ $('field-save').onclick = async () => {
     note: $('field-opt-note').checked,
     email: $('field-opt-email').checked,
     password: $('field-opt-password').checked,
+    url: $('field-url').value.trim(),
   };
   try {
     if (editingField) {
