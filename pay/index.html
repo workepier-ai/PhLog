@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>PayCalc — Shift Pay Calculator</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1e2229;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #8b93a5;
+    --accent: #4f8cff;
+    --accent2: #3ddc97;
+    --warn: #ffb454;
+    --danger: #ff5d5d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh; padding-bottom: env(safe-area-inset-bottom);
+  }
+  header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: var(--panel); position: sticky; top: 0; z-index: 20;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+
+  button {
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 12px; cursor: pointer; font-size: 13px; font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); }
+  button.icon { padding: 5px 9px; font-size: 12px; border-radius: 6px; }
+  button.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+  input, select {
+    background: var(--panel); color: var(--text); font-family: inherit;
+    border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px; font-size: 14px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+  /* period bar */
+  .periodbar {
+    display: flex; align-items: center; gap: 8px; justify-content: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel2);
+    position: sticky; top: 53px; z-index: 19;
+  }
+  .periodbar .label { font-weight: 600; font-size: 14px; min-width: 190px; text-align: center; }
+  .periodbar .label small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+
+  main { padding: 16px; display: grid; grid-template-columns: minmax(0,1fr) 330px; gap: 16px; align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px; } .periodbar { top: 0; position: static; } header { position: static; } }
+
+  .wk-head {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+    margin: 4px 0 8px; display: flex; align-items: center; gap: 10px;
+  }
+  .wk-head .wk-total { color: var(--accent2); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 13px; }
+  .wk-head::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  .day {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .day.today { border-color: var(--accent); }
+  .day.wknd .dname { color: var(--warn); }
+  .day.ph .dname { color: #e06bff; }
+  .day .row1 { display: flex; align-items: center; gap: 8px; }
+  .dname { width: 92px; flex-shrink: 0; font-weight: 600; font-size: 13px; }
+  .dname small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+  .shift-in { flex: 1; min-width: 0; font-size: 15px; }
+  .shift-in::placeholder { color: #5c6474; }
+  .brk { width: 62px; text-align: center; font-size: 13px; padding: 7px 4px; }
+  .ph-btn { padding: 6px 8px; font-size: 11px; border-radius: 6px; color: var(--muted); }
+  .ph-btn.on { color: #e06bff; border-color: #e06bff; }
+  .day .row2 { margin-top: 7px; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+  .day .row2 .amt { margin-left: auto; color: var(--accent2); font-weight: 600; font-size: 14px; }
+  .day .row2 .err { color: var(--danger); }
+  .tag { border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font-size: 11px; background: var(--panel2); }
+  .tag.b125 { color: #9db6ff; } .tag.b150 { color: var(--warn); } .tag.b175 { color: #ff9d9d; } .tag.b225 { color: #e06bff; }
+  .tag.pen { color: var(--accent2); }
+
+  /* payslip */
+  .slip {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; position: sticky; top: 110px;
+  }
+  @media (max-width: 860px) { .slip { position: static; } }
+  .slip h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 10px; }
+  .slip table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .slip td { padding: 4px 0; vertical-align: baseline; }
+  .slip td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .slip td.h { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-right: 8px; white-space: nowrap; }
+  .slip tr.sep td { border-top: 1px solid var(--border); padding-top: 8px; }
+  .slip tr.tot td { font-weight: 700; }
+  .slip tr.net td { font-weight: 700; font-size: 17px; color: var(--accent2); padding-top: 6px; }
+  .slip tr.muted td { color: var(--muted); }
+  .slip .note { color: var(--muted); font-size: 11px; margin-top: 10px; line-height: 1.45; }
+
+  /* modal */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.65);
+    display: none; align-items: flex-start; justify-content: center; z-index: 50;
+    padding: 20px; overflow-y: auto;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px; width: 100%; max-width: 520px; margin: auto;
+  }
+  .modal h2 { font-size: 16px; margin-bottom: 4px; }
+  .modal .hint { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px 14px; margin-bottom: 14px; }
+  legend { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 0 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .f { display: flex; flex-direction: column; gap: 3px; }
+  .f label { font-size: 11px; color: var(--muted); }
+  .f input, .f select { width: 100%; }
+  .chk { display: flex; align-items: flex-start; gap: 9px; margin: 9px 0; cursor: pointer; font-size: 13px; }
+  .chk input { width: 17px; height: 17px; accent-color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+  .chk span small { display: block; color: var(--muted); font-size: 11px; }
+  .derived { font-size: 12px; color: var(--muted); margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .derived b { color: var(--text); font-weight: 600; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; flex-wrap: wrap; }
+  .modal-actions .spacer { flex: 1; }
+  .help { font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+  .help code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--text); font-size: 12px; }
+  .help b { color: var(--text); }
+  .help ul { margin: 8px 0 8px 18px; }
+  .help li { margin: 4px 0; }
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--accent); color: var(--text);
+    padding: 9px 16px; border-radius: 20px; font-size: 13px; z-index: 90;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💰 PayCalc</h1>
+  <span class="sub" id="rate-sub"></span>
+  <span class="spacer"></span>
+  <button class="icon" id="btn-help">?</button>
+  <button class="icon" id="btn-settings">⚙ Rates</button>
+</header>
+
+<div class="periodbar">
+  <button class="icon" id="prev">‹</button>
+  <div class="label" id="period-label">—</div>
+  <button class="icon" id="next">›</button>
+  <button class="icon" id="today-btn">Today</button>
+</div>
+
+<main>
+  <section id="days"></section>
+  <aside>
+    <div class="slip">
+      <h2>Pay Details <span id="slip-period" style="float:right;font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
+      <table id="slip-table"></table>
+      <div class="note" id="slip-note"></div>
+      <div style="display:flex;gap:6px;margin-top:12px">
+        <button class="icon" id="copy-slip" style="flex:1">⧉ Copy summary</button>
+        <button class="icon danger" id="clear-period">Clear period</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- Settings -->
+<div class="overlay" id="settings-overlay">
+  <div class="modal">
+    <h2>Rates &amp; rules</h2>
+    <div class="hint">Defaults are read off your 26 Jul 2026 payslip. Change anything that doesn't match.</div>
+
+    <fieldset>
+      <legend>Base &amp; multipliers</legend>
+      <div class="grid2">
+        <div class="f"><label>Base hourly rate ($)</label><input type="number" step="0.01" id="s-base"></div>
+        <div class="f"><label>Mon–Fri (%)</label><input type="number" step="1" id="s-mwk"></div>
+        <div class="f"><label>Saturday (%)</label><input type="number" step="1" id="s-msat"></div>
+        <div class="f"><label>Sunday (%)</label><input type="number" step="1" id="s-msun"></div>
+        <div class="f"><label>Public holiday (%)</label><input type="number" step="1" id="s-mph"></div>
+      </div>
+      <div class="derived" id="derived-rates"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Shift penalties (per hour)</legend>
+      <div class="grid2">
+        <div class="f"><label>Afternoon penalty ($/h)</label><input type="number" step="0.01" id="s-paft"></div>
+        <div class="f"><label>Afternoon window</label>
+          <div style="display:flex;gap:4px;align-items:center"><input type="time" id="s-afts"><span style="color:var(--muted)">→</span><input type="time" id="s-afte"></div>
+        </div>
+        <div class="f"><label>Evening/night penalty ($/h)</label><input type="number" step="0.01" id="s-peve"></div>
+        <div class="f"><label>Evening window</label>
+          <div style="display:flex;gap:4px;align-items:center"><input type="time" id="s-eves"><span style="color:var(--muted)">→</span><input type="time" id="s-evee"></div>
+        </div>
+      </div>
+      <label class="chk"><input type="checkbox" id="s-wkndpen">
+        <span>Pay shift penalties on weekends / public holidays too
+          <small>Off by default — on your payslip the weekend hours are paid at 150%/175% instead of penalties (16.00 + 14.04 penalty hours = 30.04 weekday hours exactly).</small></span></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Night shifts crossing midnight</legend>
+      <label class="chk"><input type="checkbox" id="s-pm">
+        <span>Assume PM for plain numbers
+          <small>“9 to 5” → 9:00pm–5:00am. Type <code>9am</code> to force morning.</small></span></label>
+      <label class="chk"><input type="checkbox" id="s-split">
+        <span>Split the shift at midnight for day rates
+          <small>Off = the whole shift is paid at the rate of the day it <b>starts</b> (standard award rule — a Friday 9pm–5am shift is all weekday rate). On = the after-midnight hours get the next day's rate.</small></span></label>
+      <div class="f" style="margin-top:8px"><label>Unpaid break default (minutes)</label><input type="number" step="1" id="s-brk" style="width:110px"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Pay cycle, tax &amp; super</legend>
+      <div class="grid2">
+        <div class="f"><label>Cycle length</label>
+          <select id="s-cyclen"><option value="1">Weekly</option><option value="2">Fortnightly</option><option value="4">4-weekly</option></select></div>
+        <div class="f"><label>A period started on (Mon)</label><input type="date" id="s-anchor"></div>
+        <div class="f"><label>Superannuation (%)</label><input type="number" step="0.1" id="s-super"></div>
+        <div class="f"><label>Tax</label>
+          <select id="s-taxmode">
+            <option value="auto">ATO estimate (scale 2)</option>
+            <option value="pct">Flat % of gross</option>
+            <option value="fixed">Fixed $ per period</option>
+            <option value="none">None</option>
+          </select></div>
+        <div class="f" id="taxval-wrap"><label id="taxval-lbl">Value</label><input type="number" step="0.01" id="s-taxval"></div>
+      </div>
+    </fieldset>
+
+    <div class="modal-actions">
+      <button class="icon" id="export-btn">⤓ Export</button>
+      <button class="icon" id="import-btn">⤒ Import</button>
+      <span class="spacer"></span>
+      <button id="reset-btn" class="danger">Reset defaults</button>
+      <button class="primary" id="close-settings">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help -->
+<div class="overlay" id="help-overlay">
+  <div class="modal">
+    <h2>How to enter shifts</h2>
+    <div class="hint">One box per day. Type it however you say it.</div>
+    <div class="help">
+      <ul>
+        <li><code>9-5</code> → 9:00pm → 5:00am (8h) — PM is assumed, and the end rolls into the next morning automatically.</li>
+        <li><code>6pm-2am</code>, <code>1800-0230</code>, <code>9:30pm - 5:15</code> — all fine. Use <code>-</code>, <code>to</code>, or <code>–</code>.</li>
+        <li><code>9am-5</code> → 9:00am → 5:00pm. Adding <b>am</b> flips it back to a day shift.</li>
+        <li>Two shifts in one day? Separate with a comma: <code>10am-2pm, 8pm-1am</code>.</li>
+        <li>The shift is filed under the day it <b>starts</b>, even when it finishes at 5am the next morning.</li>
+        <li><b>brk</b> is the unpaid break in minutes — it's taken off pro-rata across the shift.</li>
+        <li><b>PH</b> marks that day as a public holiday.</li>
+      </ul>
+      <b>How the pay is worked out</b>
+      <ul>
+        <li>Every hour is paid at your base rate × the multiplier for that day: Mon–Fri 125%, Sat 150%, Sun 175%, public holiday 225%.</li>
+        <li>On top of that, weekday hours falling in the <b>afternoon window</b> (6pm–midnight) earn the afternoon penalty per hour, and hours in the <b>evening/night window</b> (midnight–6am) earn the evening penalty.</li>
+        <li>Weekend and public-holiday hours get the higher multiplier <i>instead of</i> the penalties (change this in ⚙ Rates).</li>
+        <li>Tax is an estimate of PAYG withholding at scale 2 (tax-free threshold claimed, no HELP debt). Super is a % of gross.</li>
+      </ul>
+      Everything is saved in this browser only — nothing is uploaded. Use <b>⤓ Export</b> in ⚙ Rates to back it up.
+    </div>
+    <div class="modal-actions"><button class="primary" id="close-help">Got it</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="file-in" accept="application/json" style="display:none">
+
+<script>
+/* ────────────────────────────── defaults ────────────────────────────── */
+const DEFAULTS = {
+  base: 32.28,            // 40.35 / 1.25 — derived from the payslip
+  mulWk: 125, mulSat: 150, mulSun: 175, mulPH: 225,
+  penAft: 3.04, aftStart: "18:00", aftEnd: "24:00",
+  penEve: 4.55, eveStart: "00:00", eveEnd: "06:00",
+  wkndPen: false,
+  defaultPM: true,
+  splitMidnight: false,
+  breakDefault: 0,
+  cycleWeeks: 2,
+  anchor: "2026-07-13",   // Monday; the payslip fortnight ended Sun 26 Jul 2026
+  superPct: 12,
+  taxMode: "auto", taxVal: 0
+};
+const KEY = "phpay.v1";
+const DAYNAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/* ────────────────────────────── state ────────────────────────────── */
+let S = {...DEFAULTS};
+let shifts = {};      // "YYYY-MM-DD" -> { txt: "9-5", brk: 30, ph: false }
+let periodIdx = 0;
+
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || "{}");
+    S = {...DEFAULTS, ...(raw.settings || {})};
+    shifts = raw.shifts || {};
+  } catch (e) { S = {...DEFAULTS}; shifts = {}; }
+}
+function save() {
+  localStorage.setItem(KEY, JSON.stringify({settings: S, shifts}));
+}
+
+/* ────────────────────────────── date helpers ────────────────────────────── */
+function ymd(d) {
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function fromYmd(s) { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function fmtShort(d) { return d.getDate() + " " + MONTHS[d.getMonth()]; }
+function hhmmToMin(s) {
+  if (!s) return 0;
+  if (s === "24:00") return 1440;
+  const [h,m] = s.split(":").map(Number);
+  return h*60 + (m||0);
+}
+function minToHhmm(m) {
+  m = ((m % 1440) + 1440) % 1440;
+  const h = Math.floor(m/60), mm = m%60;
+  const ap = h < 12 ? "am" : "pm";
+  let h12 = h % 12; if (h12 === 0) h12 = 12;
+  return h12 + (mm ? ":" + String(mm).padStart(2,"0") : "") + ap;
+}
+function periodStart(idx) {
+  const a = fromYmd(S.anchor);
+  return addDays(a, idx * S.cycleWeeks * 7);
+}
+function periodIdxFor(date) {
+  const a = fromYmd(S.anchor);
+  const days = Math.floor((date - a) / 86400000);
+  return Math.floor(days / (S.cycleWeeks * 7));
+}
+
+/* ────────────────────────────── shift text parsing ────────────────────────────── */
+function parseClock(raw) {
+  let s = String(raw).trim().toLowerCase().replace(/\s+/g, "");
+  if (!s) return null;
+  if (s === "noon" || s === "midday") return {h:12, mi:0, mer:"p", mil:false};
+  if (s === "midnight") return {h:0, mi:0, mer:"a", mil:false};
+
+  let mer = null;
+  const m = s.match(/(a\.?m\.?|p\.?m\.?|a|p)$/);
+  if (m && /[ap]/.test(m[1])) { mer = m[1][0]; s = s.slice(0, s.length - m[1].length); }
+  s = s.replace(/[^\d:.]/g, "");
+  if (!s) return null;
+
+  let h, mi = 0, mil = false;
+  if (s.includes(":") || s.includes(".")) {
+    const p = s.split(/[:.]/);
+    h = parseInt(p[0], 10); mi = parseInt(p[1] || "0", 10);
+  } else if (s.length <= 2) {
+    h = parseInt(s, 10);
+  } else if (s.length === 3) {
+    h = parseInt(s[0], 10); mi = parseInt(s.slice(1), 10);
+  } else {
+    h = parseInt(s.slice(0,2), 10); mi = parseInt(s.slice(2,4), 10); mil = true;
+  }
+  if (isNaN(h) || isNaN(mi) || mi > 59 || h > 24) return null;
+  if (h > 12) mil = true;                       // 18, 21 … can only be 24-hour
+  if (h === 24) { h = 0; mil = true; }
+  return {h, mi, mer, mil};
+}
+function startMinutes(p) {
+  if (p.mer === "a") return (p.h % 12) * 60 + p.mi;
+  if (p.mer === "p") return (p.h % 12 + 12) * 60 + p.mi;
+  if (p.mil) return p.h * 60 + p.mi;
+  if (p.h === 12) return S.defaultPM ? 720 : 720;                 // 12 → noon either way
+  if (S.defaultPM) return (p.h % 12 + 12) * 60 + p.mi;            // nights: 9 → 9pm
+  return (p.h < 6 ? p.h + 12 : p.h) * 60 + p.mi;                  // days: 9 → 9am, 3 → 3pm
+}
+function endMinutes(p, start) {
+  let cands;
+  if (p.mer === "a") cands = [(p.h % 12) * 60 + p.mi];
+  else if (p.mer === "p") cands = [(p.h % 12 + 12) * 60 + p.mi];
+  else if (p.mil) cands = [p.h * 60 + p.mi];
+  else cands = [(p.h % 12) * 60 + p.mi, (p.h % 12 + 12) * 60 + p.mi];
+  // pick whichever reading gives the shortest shift that still ends after it starts
+  let best = null;
+  for (const c of cands) {
+    let dur = c - start;
+    while (dur <= 0) dur += 1440;
+    if (best === null || dur < best) best = dur;
+  }
+  return start + best;
+}
+// "9-5, 10am-2pm" -> [{start, end}, …]
+function parseShiftText(txt) {
+  const out = [], errs = [];
+  const parts = String(txt).split(/[,;&+]|\band\b/i).map(s => s.trim()).filter(Boolean);
+  for (const part of parts) {
+    const bits = part.split(/\s*(?:-{1,2}|–|—|to|till|until|→|>)\s*/i).filter(Boolean);
+    if (bits.length < 2) { errs.push(part); continue; }
+    const ps = parseClock(bits[0]), pe = parseClock(bits[1]);
+    if (!ps || !pe) { errs.push(part); continue; }
+    const st = startMinutes(ps);
+    const en = endMinutes(pe, st);
+    out.push({start: st, end: en});
+  }
+  return {shifts: out, errs};
+}
+
+/* ────────────────────────────── pay maths ────────────────────────────── */
+function overlap(a1, a2, b1, b2) { return Math.max(0, Math.min(a2,b2) - Math.max(a1,b1)); }
+
+function bandFor(date, isPH) {
+  if (isPH) return "ph";
+  const d = date.getDay();
+  if (d === 0) return "sun";
+  if (d === 6) return "sat";
+  return "wk";
+}
+const BAND_LABEL = () => ({
+  wk:  {label: S.mulWk + "%",  mul: S.mulWk/100,  cls: "b125"},
+  sat: {label: S.mulSat + "%", mul: S.mulSat/100, cls: "b150"},
+  sun: {label: S.mulSun + "%", mul: S.mulSun/100, cls: "b175"},
+  ph:  {label: S.mulPH + "%",  mul: S.mulPH/100,  cls: "b225"}
+});
+
+// one shift on one date -> hours per band + penalty hours + $
+function calcOne(dateStr, st, en, brkMin, isPH) {
+  const base = fromYmd(dateStr);
+  const bands = {wk:0, sat:0, sun:0, ph:0};
+  let aft = 0, eve = 0;
+
+  const aftS = hhmmToMin(S.aftStart), aftE = hhmmToMin(S.aftEnd) || 1440;
+  const eveS = hhmmToMin(S.eveStart), eveE = hhmmToMin(S.eveEnd) || 1440;
+
+  for (let k = 0; k < 3; k++) {
+    const segS = Math.max(st, k*1440), segE = Math.min(en, (k+1)*1440);
+    if (segE <= segS) continue;
+    const dayDate = S.splitMidnight ? addDays(base, k) : base;
+    const phThisSeg = isPH && (S.splitMidnight ? k === 0 : true);
+    const band = bandFor(dayDate, phThisSeg);
+    bands[band] += (segE - segS) / 60;
+    if (S.wkndPen || band === "wk") {
+      aft += overlap(segS, segE, k*1440 + aftS, k*1440 + aftE) / 60;
+      eve += overlap(segS, segE, k*1440 + eveS, k*1440 + eveE) / 60;
+    }
+  }
+
+  // unpaid break comes off pro-rata
+  const rawH = (en - st) / 60;
+  const scale = rawH > 0 ? Math.max(0, rawH - brkMin/60) / rawH : 0;
+  for (const k in bands) bands[k] *= scale;
+  aft *= scale; eve *= scale;
+
+  const B = BAND_LABEL();
+  let gross = 0;
+  for (const k in bands) gross += bands[k] * S.base * B[k].mul;
+  gross += aft * S.penAft + eve * S.penEve;
+
+  return {bands, aft, eve, gross, hours: rawH * scale, start: st, end: en};
+}
+
+function calcDay(dateStr) {
+  const rec = shifts[dateStr] || {};
+  const {shifts: list, errs} = parseShiftText(rec.txt || "");
+  const brkTotal = Number(rec.brk ?? 0) || 0;
+  const agg = {bands:{wk:0,sat:0,sun:0,ph:0}, aft:0, eve:0, gross:0, hours:0, parts:[], errs};
+  const brkEach = list.length ? brkTotal / list.length : 0;
+  for (const sh of list) {
+    const r = calcOne(dateStr, sh.start, sh.end, brkEach, !!rec.ph);
+    for (const k in r.bands) agg.bands[k] += r.bands[k];
+    agg.aft += r.aft; agg.eve += r.eve; agg.gross += r.gross; agg.hours += r.hours;
+    agg.parts.push(r);
+  }
+  return agg;
+}
+
+/* ── PAYG withholding, ATO Schedule 1 "scale 2" (tax-free threshold claimed).
+      Coefficients are for FY2026-27 (15% rate on $18,201–$45,000). The
+      $45k–$135k band is calibrated against the 26 Jul 2026 payslip:
+      $2,709.46 gross fortnightly → $504 withheld. Estimate only. ── */
+const SCALE2 = [
+  [361,      0.0000,   0.0000],
+  [500,      0.1500,  54.2308],
+  [625,      0.2500, 104.2308],
+  [721,      0.1700,  54.2308],
+  [865,      0.177807, 59.8598],
+  [1282,     0.3227,  185.1921],
+  [2596,     0.3200,  181.7307],
+  [3653,     0.3900,  363.4507],
+  [Infinity, 0.4700,  655.6907]
+];
+function weeklyWithholding(weeklyGross) {
+  if (weeklyGross <= 0) return 0;
+  const x = Math.floor(weeklyGross) + 0.99;
+  for (const [cap, a, b] of SCALE2) {
+    if (x < cap) return Math.max(0, Math.round(a * x - b));
+  }
+  return 0;
+}
+function taxFor(gross) {
+  if (S.taxMode === "none") return 0;
+  if (S.taxMode === "pct") return gross * (Number(S.taxVal)||0) / 100;
+  if (S.taxMode === "fixed") return Number(S.taxVal) || 0;
+  const wks = S.cycleWeeks;
+  return weeklyWithholding(gross / wks) * wks;
+}
+
+function money(n) {
+  return (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString("en-AU", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function hrs(n) { return n.toFixed(2); }
+
+/* ────────────────────────────── rendering ────────────────────────────── */
+const $ = id => document.getElementById(id);
+
+function render() {
+  renderPeriodBar();
+  renderDays();
+  renderSlip();
+  $("rate-sub").textContent = money(S.base) + "/h base · " + S.cycleWeeks + "-week cycle";
+}
+
+function renderPeriodBar() {
+  const s = periodStart(periodIdx), e = addDays(s, S.cycleWeeks*7 - 1);
+  $("period-label").innerHTML = fmtShort(s) + " – " + fmtShort(e) +
+    "<small>" + e.getFullYear() + (periodIdx === periodIdxFor(new Date()) ? " · current" : "") + "</small>";
+}
+
+function renderDays() {
+  const wrap = $("days");
+  wrap.innerHTML = "";
+  const start = periodStart(periodIdx);
+  const todayStr = ymd(new Date());
+  const B = BAND_LABEL();
+
+  for (let w = 0; w < S.cycleWeeks; w++) {
+    const wkHead = document.createElement("div");
+    wkHead.className = "wk-head";
+    wkHead.innerHTML = "<span>Week " + (w+1) + "</span><span class='wk-total' id='wt" + w + "'></span>";
+    wrap.appendChild(wkHead);
+    let weekGross = 0;
+
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(start, w*7 + i);
+      const ds = ymd(date);
+      const rec = shifts[ds] || {};
+      const res = calcDay(ds);
+      weekGross += res.gross;
+
+      const row = document.createElement("div");
+      row.className = "day" + (date.getDay() === 0 || date.getDay() === 6 ? " wknd" : "") +
+                      (rec.ph ? " ph" : "") + (ds === todayStr ? " today" : "");
+      row.innerHTML =
+        '<div class="row1">' +
+          '<div class="dname">' + DAYNAMES[date.getDay()].slice(0,3) + '<small>' + fmtShort(date) + '</small></div>' +
+          '<input class="shift-in" placeholder="e.g. 9-5" value="' + (rec.txt || "").replace(/"/g,"&quot;") + '">' +
+          '<input class="brk" type="number" min="0" step="5" placeholder="brk" value="' + (rec.brk ? rec.brk : "") + '">' +
+          '<button class="ph-btn' + (rec.ph ? " on" : "") + '">PH</button>' +
+        '</div>' +
+        '<div class="row2"></div>';
+
+      const out = row.querySelector(".row2");
+      const inp = row.querySelector(".shift-in");
+      const brk = row.querySelector(".brk");
+      const phb = row.querySelector(".ph-btn");
+
+      const paint = () => {
+        const r = calcDay(ds);
+        let h = "";
+        if (r.errs.length) h += '<span class="err">can\'t read “' + r.errs.join(", ") + '”</span>';
+        if (r.parts.length) {
+          h += r.parts.map(p => minToHhmm(p.start) + " → " + minToHhmm(p.end)).join(" · ");
+          h += ' <span style="color:var(--text)">' + hrs(r.hours) + 'h</span>';
+          for (const k of ["wk","sat","sun","ph"]) {
+            if (r.bands[k] > 0.001) h += ' <span class="tag ' + B[k].cls + '">' + hrs(r.bands[k]) + 'h @ ' + B[k].label + '</span>';
+          }
+          if (r.aft > 0.001) h += ' <span class="tag pen">aft ' + hrs(r.aft) + 'h</span>';
+          if (r.eve > 0.001) h += ' <span class="tag pen">eve ' + hrs(r.eve) + 'h</span>';
+          h += '<span class="amt">' + money(r.gross) + '</span>';
+        } else if (!r.errs.length) {
+          h = '<span style="opacity:.5">—</span>';
+        }
+        out.innerHTML = h;
+      };
+      paint();
+
+      const commit = () => {
+        const t = inp.value.trim(), b = Number(brk.value) || 0;
+        if (!t && !b && !phb.classList.contains("on")) delete shifts[ds];
+        else shifts[ds] = {txt: t, brk: b, ph: phb.classList.contains("on")};
+        save(); paint(); renderSlip(); renderWeekTotals();
+      };
+      inp.addEventListener("input", commit);
+      brk.addEventListener("input", commit);
+      inp.addEventListener("focus", () => { if (!inp.value && S.breakDefault && !brk.value) brk.value = S.breakDefault; });
+      phb.addEventListener("click", () => { phb.classList.toggle("on"); row.classList.toggle("ph"); commit(); });
+
+      wrap.appendChild(row);
+    }
+  }
+  renderWeekTotals();
+}
+
+function renderWeekTotals() {
+  const start = periodStart(periodIdx);
+  for (let w = 0; w < S.cycleWeeks; w++) {
+    let g = 0;
+    for (let i = 0; i < 7; i++) g += calcDay(ymd(addDays(start, w*7 + i))).gross;
+    const el = $("wt" + w);
+    if (el) el.textContent = g ? money(g) : "";
+  }
+}
+
+function periodTotals() {
+  const start = periodStart(periodIdx);
+  const t = {bands:{wk:0,sat:0,sun:0,ph:0}, aft:0, eve:0, gross:0, hours:0};
+  for (let i = 0; i < S.cycleWeeks*7; i++) {
+    const r = calcDay(ymd(addDays(start, i)));
+    for (const k in r.bands) t.bands[k] += r.bands[k];
+    t.aft += r.aft; t.eve += r.eve; t.gross += r.gross; t.hours += r.hours;
+  }
+  return t;
+}
+
+function renderSlip() {
+  const t = periodTotals();
+  const B = BAND_LABEL();
+  const s = periodStart(periodIdx), e = addDays(s, S.cycleWeeks*7 - 1);
+  $("slip-period").textContent = fmtShort(s) + "–" + fmtShort(e);
+
+  const rows = [];
+  const line = (name, h, rate, amt) =>
+    '<tr><td>' + name + '</td><td class="h">' + (h !== null ? hrs(h) : "") + '</td><td class="h">' +
+    (rate !== null ? rate.toFixed(2) : "") + '</td><td class="n">' + money(amt) + '</td></tr>';
+
+  rows.push('<tr class="muted"><td style="font-size:11px">Earnings</td><td class="h" style="font-size:11px">Hours</td><td class="h" style="font-size:11px">Rate</td><td class="n" style="font-size:11px">Amount</td></tr>');
+  for (const k of ["wk","sat","sun","ph"]) {
+    if (t.bands[k] > 0.001) {
+      const rate = S.base * B[k].mul;
+      rows.push(line("Ordinary Hours @ " + B[k].label, t.bands[k], rate, t.bands[k] * rate));
+    }
+  }
+  if (t.eve > 0.001) rows.push(line("Evening Shift Penalty", t.eve, S.penEve, t.eve * S.penEve));
+  if (t.aft > 0.001) rows.push(line("Afternoon Shift Penalty", t.aft, S.penAft, t.aft * S.penAft));
+  if (!rows.length) rows.push('<tr><td colspan="4" style="color:var(--muted);padding:10px 0">No shifts entered yet.</td></tr>');
+
+  const tax = taxFor(t.gross);
+  const sup = t.gross * (Number(S.superPct)||0) / 100;
+
+  rows.push('<tr class="sep tot"><td>Total</td><td class="h">' + hrs(t.hours) + '</td><td></td><td class="n">' + money(t.gross) + '</td></tr>');
+  rows.push('<tr class="sep"><td>Taxable Gross</td><td></td><td></td><td class="n">' + money(t.gross) + '</td></tr>');
+  rows.push('<tr><td>Income tax</td><td></td><td></td><td class="n">' + money(-tax) + '</td></tr>');
+  rows.push('<tr class="net"><td>Net Pay</td><td></td><td></td><td class="n">' + money(t.gross - tax) + '</td></tr>');
+  rows.push('<tr class="sep muted"><td>Superannuation ' + (Number(S.superPct)||0) + '%</td><td></td><td></td><td class="n">' + money(sup) + '</td></tr>');
+
+  $("slip-table").innerHTML = rows.join("");
+  $("slip-note").innerHTML = S.taxMode === "auto"
+    ? "Tax = PAYG estimate, scale 2 (tax-free threshold claimed, no HELP/HECS). Your actual withholding may differ by a dollar or two."
+    : "Tax is set manually in ⚙ Rates.";
+}
+
+/* ────────────────────────────── settings UI ────────────────────────────── */
+const FIELDS = [
+  ["s-base","base","num"], ["s-mwk","mulWk","num"], ["s-msat","mulSat","num"],
+  ["s-msun","mulSun","num"], ["s-mph","mulPH","num"],
+  ["s-paft","penAft","num"], ["s-afts","aftStart","str"], ["s-afte","aftEnd","str"],
+  ["s-peve","penEve","num"], ["s-eves","eveStart","str"], ["s-evee","eveEnd","str"],
+  ["s-wkndpen","wkndPen","bool"], ["s-pm","defaultPM","bool"], ["s-split","splitMidnight","bool"],
+  ["s-brk","breakDefault","num"], ["s-cyclen","cycleWeeks","num"], ["s-anchor","anchor","str"],
+  ["s-super","superPct","num"], ["s-taxmode","taxMode","str"], ["s-taxval","taxVal","num"]
+];
+function fillSettings() {
+  for (const [id, key, type] of FIELDS) {
+    const el = $(id);
+    if (type === "bool") el.checked = !!S[key]; else el.value = S[key];
+  }
+  syncTaxField();
+  renderDerived();
+}
+function readSettings() {
+  for (const [id, key, type] of FIELDS) {
+    const el = $(id);
+    if (type === "bool") S[key] = el.checked;
+    else if (type === "num") S[key] = Number(el.value) || 0;
+    else S[key] = el.value;
+  }
+  if (S.aftEnd === "00:00") S.aftEnd = "24:00";
+  save(); syncTaxField(); renderDerived(); render();
+}
+function syncTaxField() {
+  const show = S.taxMode === "pct" || S.taxMode === "fixed";
+  $("taxval-wrap").style.visibility = show ? "visible" : "hidden";
+  $("taxval-lbl").textContent = S.taxMode === "pct" ? "Percent of gross" : "Amount per period";
+}
+function renderDerived() {
+  const B = BAND_LABEL();
+  $("derived-rates").innerHTML = "Hourly: " +
+    ["wk","sat","sun","ph"].map(k => B[k].label + " = <b>$" + (S.base*B[k].mul).toFixed(2) + "</b>").join(" · ");
+}
+
+/* ────────────────────────────── wiring ────────────────────────────── */
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+$("prev").onclick = () => { periodIdx--; render(); };
+$("next").onclick = () => { periodIdx++; render(); };
+$("today-btn").onclick = () => { periodIdx = periodIdxFor(new Date()); render(); };
+
+$("btn-settings").onclick = () => { fillSettings(); $("settings-overlay").classList.add("open"); };
+$("close-settings").onclick = () => $("settings-overlay").classList.remove("open");
+$("btn-help").onclick = () => $("help-overlay").classList.add("open");
+$("close-help").onclick = () => $("help-overlay").classList.remove("open");
+for (const ov of document.querySelectorAll(".overlay")) {
+  ov.addEventListener("click", e => { if (e.target === ov) ov.classList.remove("open"); });
+}
+for (const [id] of FIELDS) $(id).addEventListener("change", readSettings);
+
+$("reset-btn").onclick = () => {
+  if (!confirm("Reset all rates and rules back to the payslip defaults? Your entered shifts are kept.")) return;
+  S = {...DEFAULTS}; save(); fillSettings(); render(); toast("Rates reset");
+};
+$("clear-period").onclick = () => {
+  const s = periodStart(periodIdx);
+  if (!confirm("Clear every shift in this period?")) return;
+  for (let i = 0; i < S.cycleWeeks*7; i++) delete shifts[ymd(addDays(s, i))];
+  save(); render(); toast("Period cleared");
+};
+$("copy-slip").onclick = () => {
+  const t = periodTotals(), B = BAND_LABEL();
+  const s = periodStart(periodIdx), e = addDays(s, S.cycleWeeks*7 - 1);
+  const L = ["Pay " + fmtShort(s) + " – " + fmtShort(e) + " " + e.getFullYear(), ""];
+  for (const k of ["wk","sat","sun","ph"]) {
+    if (t.bands[k] > 0.001) L.push("Ordinary Hours @ " + B[k].label + "  " + hrs(t.bands[k]) + "h  @" + (S.base*B[k].mul).toFixed(2) + "  " + money(t.bands[k]*S.base*B[k].mul));
+  }
+  if (t.eve > 0.001) L.push("Evening Shift Penalty  " + hrs(t.eve) + "h  @" + S.penEve.toFixed(2) + "  " + money(t.eve*S.penEve));
+  if (t.aft > 0.001) L.push("Afternoon Shift Penalty  " + hrs(t.aft) + "h  @" + S.penAft.toFixed(2) + "  " + money(t.aft*S.penAft));
+  const tax = taxFor(t.gross);
+  L.push("", "Gross  " + money(t.gross), "Tax  " + money(-tax), "Net  " + money(t.gross - tax),
+         "Super " + (Number(S.superPct)||0) + "%  " + money(t.gross*(Number(S.superPct)||0)/100));
+  navigator.clipboard.writeText(L.join("\n")).then(() => toast("Summary copied"), () => toast("Copy failed"));
+};
+
+$("export-btn").onclick = () => {
+  const blob = new Blob([JSON.stringify({settings:S, shifts}, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "paycalc-" + ymd(new Date()) + ".json";
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$("import-btn").onclick = () => $("file-in").click();
+$("file-in").onchange = ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      S = {...DEFAULTS, ...(d.settings||{})};
+      shifts = d.shifts || {};
+      save(); fillSettings(); render(); toast("Imported");
+    } catch (e) { toast("Bad file"); }
+  };
+  r.readAsText(f);
+  ev.target.value = "";
+};
+
+/* go */
+load();
+periodIdx = periodIdxFor(new Date());
+render();
+</script>
+</body>
+</html>
