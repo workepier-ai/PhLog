@@ -21,13 +21,15 @@ One box per day of the pay period. Type it the way you say it:
 
 - **PM is assumed** for plain numbers, because you work nights (toggle in ⚙ Rates).
 - The end time **rolls into the next morning automatically** — you never type a date.
-- The shift is filed under the day it **starts**, even when it finishes at 5am the next day.
+- The shift **stays on the day it starts**, but it's **split at midnight for rates** — the
+  hours after midnight are paid at the next day's rate. A Saturday 9pm–5am shift is 3h at
+  150%, then 5h at Sunday's 175%.
 - `brk` = unpaid break in minutes, taken off pro-rata. `PH` marks a public holiday.
 - Separators `-`, `–`, `to`, `till`, `until` all work.
 
 ## How the pay is calculated
 
-Base rate × the multiplier for the day the shift started, plus per-hour shift penalties:
+Base rate × the multiplier for the day **each hour falls on**, plus per-hour shift penalties:
 
 | | Rate | Default |
 |---|---|---|
@@ -42,6 +44,16 @@ Base rate × the multiplier for the day the shift started, plus per-hour shift p
 Weekend and public-holiday hours get the higher multiplier **instead of** the shift
 penalties (that's how the real payslip works — the penalty hours there, 16.00 + 14.04,
 add up to exactly the 30.04 weekday hours). There's a switch in ⚙ Rates if that ever changes.
+
+Because rates are split at midnight, the same 9pm–5am shift is worth quite different
+amounts depending on the night you start:
+
+| Start | Paid as | Shift penalties | Total |
+|---|---|---|---|
+| Mon–Thu 9pm | 8.00h @ 125% | 3h afternoon + 5h evening | $354.67 |
+| Fri 9pm | 3.00h @ 125% + 5.00h @ 150% | 3h afternoon | $372.27 |
+| Sat 9pm | 3.00h @ 150% + 5.00h @ 175% | none | **$427.71** |
+| Sun 9pm | 3.00h @ 175% + 5.00h @ 125% | 5h evening (the Monday hours) | $393.97 |
 
 Every rate, penalty, time window and rule is editable in **⚙ Rates**, and the panel shows
 the resulting hourly rates so you can eyeball them against a payslip.
@@ -70,7 +82,8 @@ reproduces the payslip line for line:
 | Superannuation | 325.03 | 325.14 |
 
 (The few cents of difference are only because the test roster used whole minutes rather
-than the real clock-in times.)
+than the real clock-in times. The roster was picked to land on the payslip's totals — it
+isn't your actual shifts, so it's an arithmetic check, not a re-creation of that fortnight.)
 
 ## The rest of the screen
 

@@ -221,7 +221,7 @@
           <small>“9 to 5” → 9:00pm–5:00am. Type <code>9am</code> to force morning.</small></span></label>
       <label class="chk"><input type="checkbox" id="s-split">
         <span>Split the shift at midnight for day rates
-          <small>Off = the whole shift is paid at the rate of the day it <b>starts</b> (standard award rule — a Friday 9pm–5am shift is all weekday rate). On = the after-midnight hours get the next day's rate.</small></span></label>
+          <small>On = the hours after midnight are paid at the <b>next day's</b> rate. A Saturday 9pm–5am shift is 3h at 150%, then 5h at Sunday's 175%. Off = the whole shift takes the rate of the day it starts.</small></span></label>
       <div class="f" style="margin-top:8px"><label>Unpaid break default (minutes)</label><input type="number" step="1" id="s-brk" style="width:110px"></div>
     </fieldset>
 
@@ -264,13 +264,13 @@
         <li><code>6pm-2am</code>, <code>1800-0230</code>, <code>9:30pm - 5:15</code> — all fine. Use <code>-</code>, <code>to</code>, or <code>–</code>.</li>
         <li><code>9am-5</code> → 9:00am → 5:00pm. Adding <b>am</b> flips it back to a day shift.</li>
         <li>Two shifts in one day? Separate with a comma: <code>10am-2pm, 8pm-1am</code>.</li>
-        <li>The shift is filed under the day it <b>starts</b>, even when it finishes at 5am the next morning.</li>
+        <li>The shift stays on the day it <b>starts</b>, but the hours after midnight are paid at the <b>next day's</b> rate — Saturday 9pm–5am is 3h at 150%, then 5h at Sunday's 175%.</li>
         <li><b>brk</b> is the unpaid break in minutes — it's taken off pro-rata across the shift.</li>
         <li><b>PH</b> marks that day as a public holiday.</li>
       </ul>
       <b>How the pay is worked out</b>
       <ul>
-        <li>Every hour is paid at your base rate × the multiplier for that day: Mon–Fri 125%, Sat 150%, Sun 175%, public holiday 225%.</li>
+        <li>Every hour is paid at your base rate × the multiplier for the day <i>that hour</i> falls on: Mon–Fri 125%, Sat 150%, Sun 175%, public holiday 225%.</li>
         <li>On top of that, weekday hours falling in the <b>afternoon window</b> (6pm–midnight) earn the afternoon penalty per hour, and hours in the <b>evening/night window</b> (midnight–6am) earn the evening penalty.</li>
         <li>Weekend and public-holiday hours get the higher multiplier <i>instead of</i> the penalties (change this in ⚙ Rates).</li>
         <li>Tax is an estimate of PAYG withholding at scale 2 (tax-free threshold claimed, no HELP debt). Super is a % of gross.</li>
@@ -293,12 +293,13 @@ const DEFAULTS = {
   penEve: 4.55, eveStart: "00:00", eveEnd: "06:00",
   wkndPen: false,
   defaultPM: true,
-  splitMidnight: false,
+  splitMidnight: true,   // hours after midnight are paid at the next day's rate
   breakDefault: 0,
   cycleWeeks: 2,
   anchor: "2026-07-13",   // Monday; the payslip fortnight ended Sun 26 Jul 2026
   superPct: 12,
-  taxMode: "auto", taxVal: 0
+  taxMode: "auto", taxVal: 0,
+  v: 2
 };
 const KEY = "phpay.v1";
 const DAYNAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -309,11 +310,19 @@ let S = {...DEFAULTS};
 let shifts = {};      // "YYYY-MM-DD" -> { txt: "9-5", brk: 30, ph: false }
 let periodIdx = 0;
 
+// settings saved before v2 kept the whole shift on its starting day's rate;
+// split-at-midnight is the rule now, so pull old saves forward.
+function migrate(stored) {
+  if (stored && (stored.v || 1) < 2) S.splitMidnight = true;
+  S.v = DEFAULTS.v;
+}
 function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || "{}");
     S = {...DEFAULTS, ...(raw.settings || {})};
     shifts = raw.shifts || {};
+    migrate(raw.settings);
+    save();
   } catch (e) { S = {...DEFAULTS}; shifts = {}; }
 }
 function save() {
