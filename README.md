@@ -1,10 +1,5 @@
 # 📱 PhLog — Phone Account Tracker
 
-> Also in this repo: **[💰 PayCalc](pay/)** (`pay/index.html`) — a completely separate
-> single-file shift-pay calculator. No Supabase, no login, no shared code; type `9-5` for a
-> night shift and it works out the day/weekend rates, shift penalties, tax and super.
-
-
 A single-file web app for tracking phone-number accounts. For every phone number you add, it
 **auto-creates a disposable email inbox via [mail.tm](https://mail.tm)** (address + password),
 stores everything in **Supabase**, and shows a grid where you tick off what each number has
